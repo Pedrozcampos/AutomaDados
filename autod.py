@@ -1,164 +1,139 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
 import customtkinter as ctk
+from tkinter import filedialog, messagebox
 import pandas as pd
-import sqlite3
+from datetime import datetime
 import os
-from threading import Thread
 
-# --- LÓGICA DE PROCESSAMENTO (BACK-END) ---
-class DataManager:
-    # -- Classe responsável por toda a manipulação de dados e SQL. --
-    
-    def __init__(self):
-        self.conn = None
-
-    def processar_abate(self, caminhos_origem, caminho_target, coluna_chave, coluna_valor, operacao):
-        try:
-            # 1. Conexão em memória
-            self.conn = sqlite3.connect(':memory:')
-            
-            # 2. Ingestão dos arquivos de origem
-            dfs = []
-            for f in caminhos_origem:
-                df = pd.read_excel(f) if f.endswith(('.xlsx', '.xls')) else pd.read_csv(f)
-                dfs.append(df)
-            
-            df_origem_total = pd.concat(dfs).reset_index(drop=True)
-            df_origem_total.to_sql('origem', self.conn, index=False)
-
-            # 3. Ingestão do arquivo de comparação (Target)
-            df_target = pd.read_excel(caminho_target) if caminho_target.endswith(('.xlsx', '.xls')) else pd.read_csv(caminho_target)
-            df_target.to_sql('target', self.conn, index=False)
-
-            # 4. Construção da Query SQL baseada na operação
-            # Usamos COALESCE para tratar valores nulos (vazios) como 0
-            sinal = "-" if "Subtração" in operacao else "+"
-            
-            query = f"""
-            SELECT 
-                o.*, 
-                t.{coluna_valor} AS valor_comparacao,
-                (o.{coluna_valor} {sinal} COALESCE(t.{coluna_valor}, 0)) AS resultado_final
-            FROM origem o
-            LEFT JOIN target t ON o.{coluna_chave} = t.{coluna_chave}
-            """
-            
-            resultado = pd.read_sql_query(query, self.conn)
-            
-            # 5. Exportação
-            output = "Resultado_Processamento.xlsx"
-            resultado.to_excel(output, index=False)
-            return True, output
-
-        except Exception as e:
-            return False, str(e)
-        finally:
-            if self.conn:
-                self.conn.close()
-
-# --- INTERFACE GRÁFICA (FRONT-END) ---
-class AppGUI(ctk.CTk):
+class AuditoriaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.title("Auditoria Pro - Busca Independente")
+        self.geometry("850x700")
+
+        self.caminho_arquivo1 = ctk.StringVar()
+        self.caminho_arquivo2 = ctk.StringVar()
+        self.df_final1 = pd.DataFrame()
+        self.df_final2 = pd.DataFrame()
+
+        self._criar_layout()
+
+    def _criar_layout(self):
+        ctk.CTkLabel(self, text="Painel de Auditoria Independente", font=("Arial", 22, "bold")).pack(pady=15)
+
+        # Seleção de Arquivos
+        frame_files = ctk.CTkFrame(self)
+        frame_files.pack(pady=10, padx=20, fill="x")
+
+        # Arquivo A + Busca A
+        ctk.CTkButton(frame_files, text="Arquivo A", command=lambda: self._carregar(1)).grid(row=0, column=0, padx=10, pady=10)
+        ctk.CTkLabel(frame_files, textvariable=self.caminho_arquivo1, font=("Arial", 10)).grid(row=0, column=1, sticky="w")
         
-        # Instância da lógica
-        self.manager = DataManager()
+        ctk.CTkLabel(self, text="Busca no Arquivo A:").pack(pady=(5,0))
+        self.entry_busca_a = ctk.CTkEntry(self, width=400, placeholder_text="Termo para Arquivo A (ex: Itaú)")
+        self.entry_busca_a.pack(pady=5)
+
+        # Arquivo B + Busca B
+        frame_files_b = ctk.CTkFrame(self)
+        frame_files_b.pack(pady=10, padx=20, fill="x")
         
-        # Configurações da Janela
-        self.title("Data Engine SQL Pro")
-        self.geometry("700x600")
-        self.configure_gui()
-        self.arquivos_selecionados = []
-        self.arquivo_target = ""
-
-    def configure_gui(self):
-        self.grid_columnconfigure(0, weight=1)
-
-        # Seção de Arquivos
-        self.frame_files = ctk.CTkFrame(self)
-        self.frame_files.pack(pady=20, padx=20, fill="x")
-
-        ctk.CTkLabel(self.frame_files, text="Painel de Controle de Dados", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkButton(frame_files_b, text="Arquivo B", command=lambda: self._carregar(2)).grid(row=0, column=0, padx=10, pady=10)
+        ctk.CTkLabel(frame_files_b, textvariable=self.caminho_arquivo2, font=("Arial", 10)).grid(row=0, column=1, sticky="w")
         
-        self.btn_files = ctk.CTkButton(self.frame_files, text="Selecionar Origens (Excel/CSV)", command=self.load_origins)
-        self.btn_files.pack(pady=5)
-        
-        self.lbl_origem = ctk.CTkLabel(self.frame_files, text="Nenhum arquivo carregado", text_color="gray")
-        self.lbl_origem.pack()
+        ctk.CTkLabel(self, text="Busca no Arquivo B:").pack(pady=(5,0))
+        self.entry_busca_b = ctk.CTkEntry(self, width=400, placeholder_text="Termo para Arquivo B (ex: 1.1.01.001)")
+        self.entry_busca_b.pack(pady=5)
 
-        self.btn_target = ctk.CTkButton(self.frame_files, text="Selecionar Base de Comparação", fg_color="#2c3e50", command=self.load_target)
-        self.btn_target.pack(pady=10)
-
-        # Seção de Configuração de Colunas
-        self.frame_config = ctk.CTkFrame(self)
-        self.frame_config.pack(pady=10, padx=20, fill="x")
-
-        self.entry_key = ctk.CTkEntry(self.frame_config, placeholder_text="Coluna Identificadora (ex: SKU, CPF)")
-        self.entry_key.pack(side="left", padx=10, pady=10, expand=True, fill="x")
-
-        self.entry_val = ctk.CTkEntry(self.frame_config, placeholder_text="Coluna de Valor (ex: Preço, Qtd)")
-        self.entry_val.pack(side="left", padx=10, pady=10, expand=True, fill="x")
-
-        # Operação e Botão Principal
-        self.op_menu = ctk.CTkOptionMenu(self, values=["Subtração", "Soma "])
-        self.op_menu.pack(pady=10)
-
-        self.btn_run = ctk.CTkButton(self, text="PROCESSAR VIA SQL ENGINE", height=45, fg_color="#27ae60", hover_color="#2ecc71", command=self.run_process)
+        # Botão Processar
+        self.btn_run = ctk.CTkButton(self, text="EXECUTAR ANÁLISE COMPARATIVA", fg_color="#1f538d", height=45, command=self._processar)
         self.btn_run.pack(pady=20)
 
-        # Console de Logs
-        self.txt_log = ctk.CTkTextbox(self, height=150, width=600)
-        self.txt_log.pack(pady=10, padx=20)
-        self.log("Sistema pronto. Aguardando arquivos...")
+        # Painel de Resultados
+        self.result_frame = ctk.CTkTextbox(self, width=750, height=200, font=("Courier New", 13))
+        self.result_frame.pack(pady=10, padx=20)
 
-    # Funções de Suporte (Handlers)
-    def log(self, mensagem):
-        self.txt_log.insert("end", f"> {mensagem}\n")
-        self.txt_log.see("end")
+        # Botão Exportar
+        self.btn_export = ctk.CTkButton(self, text="EXPORTAR RELATÓRIO (EXCEL)", state="disabled", fg_color="green", command=self._exportar)
+        self.btn_export.pack(pady=10)
 
-    def load_origins(self):
-        self.arquivos_selecionados = filedialog.askopenfilenames()
-        if self.arquivos_selecionados:
-            self.lbl_origem.configure(text=f"{len(self.arquivos_selecionados)} arquivos selecionados", text_color="white")
-            self.log(f"{len(self.arquivos_selecionados)} arquivos de origem carregados.")
+    def _carregar(self, num):
+        path = filedialog.askopenfilename(filetypes=[("Dados", "*.xlsx *.csv")])
+        if path:
+            if num == 1: self.caminho_arquivo1.set(path)
+            else: self.caminho_arquivo2.set(path)
 
-    def load_target(self):
-        self.arquivo_target = filedialog.askopenfilename()
-        if self.arquivo_target:
-            self.log(f"Base de comparação definida: {os.path.basename(self.arquivo_target)}")
+    def _limpar_valor(self, df):
+        """Trata formatos decimais com segurança."""
+        for col in ['Débito', 'Crédito']:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
+                def tratar(val):
+                    if ',' in val:
+                        val = val.replace('.', '').replace(',', '.')
+                    return val
+                df[col] = df[col].apply(tratar)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        return df
 
-    def run_process(self):
-        # Validação simples
-        if not self.arquivos_selecionados or not self.arquivo_target:
-            messagebox.showwarning("Erro", "Selecione todos os arquivos antes de continuar.")
+    def _processar(self):
+        termo_a = self.entry_busca_a.get()
+        termo_b = self.entry_busca_b.get()
+        f1, f2 = self.caminho_arquivo1.get(), self.caminho_arquivo2.get()
+
+        if not termo_a or not termo_b or not f1 or not f2:
+            messagebox.showwarning("Aviso", "Preencha todos os campos de busca e selecione os arquivos.")
             return
-        
-        # Thread para não travar a interface
-        self.log("Iniciando motor SQL... Aguarde.")
-        Thread(target=self.execute_task).start()
 
-    def execute_task(self):
-        chave = self.entry_key.get()
-        valor = self.entry_val.get()
-        op = self.op_menu.get()
+        try:
+            df1 = pd.read_csv(f1) if f1.endswith('.csv') else pd.read_excel(f1)
+            df2 = pd.read_csv(f2) if f2.endswith('.csv') else pd.read_excel(f2)
 
-        sucesso, msg = self.manager.processar_abate(
-            self.arquivos_selecionados, 
-            self.arquivo_target, 
-            chave, 
-            valor, 
-            op
-        )
+            df1 = self._limpar_valor(df1)
+            df2 = self._limpar_valor(df2)
 
-        if sucesso:
-            self.log(f"Sucesso! Resultado gerado em: {msg}")
-            messagebox.showinfo("Concluído", "Arquivos processados e salvos com sucesso!")
-            os.startfile(msg)
-        else:
-            self.log(f"ERRO: {msg}")
-            messagebox.showerror("Erro no Processamento", msg)
+            # Filtro independente para cada arquivo (Busca em Conta e Histórico)
+            mask1 = (df1['Conta'].astype(str).str.contains(termo_a, case=False, na=False)) | \
+                    (df1['Histórico'].astype(str).str.contains(termo_a, case=False, na=False))
+            
+            mask2 = (df2['Conta'].astype(str).str.contains(termo_b, case=False, na=False)) | \
+                    (df2['Histórico'].astype(str).str.contains(termo_b, case=False, na=False))
+
+            self.df_final1 = df1[mask1].copy()
+            self.df_final2 = df2[mask2].copy()
+
+            # Cálculos
+            deb_a, cred_a = self.df_final1['Débito'].sum(), self.df_final1['Crédito'].sum()
+            deb_b, cred_b = self.df_final2['Débito'].sum(), self.df_final2['Crédito'].sum()
+
+            resumo = (
+                f"AUDITORIA CONCLUÍDA\n"
+                f"Filtro A: [{termo_a}] | Filtro B: [{termo_b}]\n"
+                f"{'='*60}\n"
+                f"ARQUIVO A: Débito R$ {deb_a:,.2f} | Crédito R$ {cred_a:,.2f}\n"
+                f"ARQUIVO B: Débito R$ {deb_b:,.2f} | Crédito R$ {cred_b:,.2f}\n"
+                f"{'-'*60}\n"
+                f"DIFERENÇA DÉBITO : R$ {abs(deb_a - deb_b):,.2f}\n"
+                f"DIFERENÇA CRÉDITO: R$ {abs(cred_a - cred_b):,.2f}\n"
+                f"{'='*60}\n"
+            )
+
+            self.result_frame.delete("1.0", "end")
+            self.result_frame.insert("1.0", resumo)
+            self.btn_export.configure(state="normal")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro no processamento: {e}")
+
+    def _exportar(self):
+        try:
+            filename = f"Relatorio_Comparativo_{datetime.now().strftime('%H%M%S')}.xlsx"
+            with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+                self.df_final1.to_excel(writer, sheet_name='Resultados_A', index=False)
+                self.df_final2.to_excel(writer, sheet_name='Resultados_B', index=False)
+            messagebox.showinfo("Sucesso", f"Planilha gerada!\nArquivo: {filename}")
+            os.startfile(filename)
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
 
 if __name__ == "__main__":
-    app = AppGUI()
+    app = AuditoriaApp()
     app.mainloop()

@@ -41,6 +41,18 @@ class AuditoriaApp(ctk.CTk):
         self.btn_export = ctk.CTkButton(self, text="EXPORTAR RELATÓRIO COMPLETO", state="disabled", command=self._exportar)
         self.btn_export.pack(pady=10)
 
+    optionmenu_var = ctk.StringVar(value="Adição")
+    def optionmenu_callback(self, choice):
+            print("optionmenu dropdown clicked:", choice)
+
+    optionmenu_var = ctk.StringVar(value="Adição")
+    combobox = ctk.CTkOptionMenu(   values=["Adição", "Subtração", "Multiplicação", "Divisão"],
+                                command=optionmenu_callback,
+                                variable=optionmenu_var)
+    combobox.pack(padx=20, pady=10)
+
+
+
     def _adicionar(self):
         path = filedialog.askopenfilename(filetypes=[("Dados", "*.xlsx *.csv")])
         if path:

@@ -97,30 +97,46 @@ class AutoDados(ctk.CTk):
         self.btn_export.configure(state="disabled")
 
     def processar_sql(self):
-        """ Executa a consulta e mostra um resumo no campo de texto """
         try:
             if len(self.arquivos) < 2:
-                messagebox.showwarning("Aviso", "Adicione a Base e pelo menos um Confronto.")
+                messagebox.showwarning("Aviso", "Adicione a Base e o Confronto.")
                 return
 
-            t_base = f"%{self.arquivos[0]['termo']}%"
-            t_conf = f"%{self.arquivos[1]['termo']}%"
+            # 1. Pegamos os termos e garantimos que o SQL entenda o "contém" (%)
+            # O .lower() ajuda se o banco estiver configurado para diferenciar maiúsculas
+            termo_base = f"%{self.arquivos[0]['termo']}%"
+            termo_conf = f"%{self.arquivos[1]['termo']}%"
 
-            query = "SELECT b.*, ' ' as [S], c.* FROM base b, confronto_1 c WHERE b.Histórico LIKE ? AND c.Histórico LIKE ?"
-            df = pd.read_sql_query(query, self.connection, params=(t_base, t_conf))
+            # 2. Buscamos os dados da BASE (Independente)
+            query_base = "SELECT * FROM base WHERE Histórico LIKE ?"
+            df_base = pd.read_sql_query(query_base, self.connection, params=(termo_base,))
 
-            if df.empty:
-                self.txt_resumo.insert("end", "\nNenhum dado encontrado.")
+            # 3. Buscamos os dados do CONFRONTO (Independente)
+            query_conf = "SELECT * FROM confronto_1 WHERE Histórico LIKE ?"
+            df_conf = pd.read_sql_query(query_conf, self.connection, params=(termo_conf,))
+
+            if df_base.empty and df_conf.empty:
+                messagebox.showinfo("Aviso", "Nada encontrado em nenhum dos arquivos.")
                 return
 
+            # 4. Alinhamos os dois DataFrames lado a lado (estilo a imagem que você quer)
+            # O concat com axis=1 coloca um do lado do outro mesmo que tenham tamanhos diferentes
+            df_final = pd.concat([
+                df_base.reset_index(drop=True), 
+                pd.DataFrame({" ": [""] * max(len(df_base), len(df_conf))}), # Coluna em branco
+                df_conf.reset_index(drop=True)
+            ], axis=1)
+
+            # 5. Salva na memória para exportar depois
+            self.temp_df = df_final
+            
             self.txt_resumo.delete("1.0", "end")
-            self.txt_resumo.insert("end", f"Sucesso! {len(df)} linhas encontradas.\n")
-            self.txt_resumo.insert("end", "Clique em 'Exportar' para gerar o arquivo detalhado.")
+            self.txt_resumo.insert("end", f"Sucesso!\nBase: {len(df_base)} linhas\nConfronto: {len(df_conf)} linhas")
             self.btn_export.configure(state="normal")
-            self.temp_df = df # Guarda o resultado temporariamente para exportar
 
         except Exception as e:
-            messagebox.showerror("Erro SQL", str(e))
+            # Se der erro de "no such column", verifique se é Histórico ou Historico no Excel
+            messagebox.showerror("Erro", f"Erro ao buscar: {e}")
 
     def exportar_excel(self):
         """ Salva o resultado processado no Excel com cálculos """

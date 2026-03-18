@@ -6,8 +6,9 @@ import pandas as pd
 from openpyxl.styles import Font, PatternFill, Alignment
 
 
-
+# -- Classe dos Procedimentos --
 class Processamentos:
+    # Limpeza de dados 
     def tratar_dados(self, df):
         for col in ['Débito', 'Crédito']:
             if col in df.columns:
@@ -15,6 +16,7 @@ class Processamentos:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
 
+    # Verificação de colunas necessárias.
     def validar_col(self, df):
         colunas_obrigatorias = ['Histórico', 'Débito', 'Crédito', 'Conta', 'Data',]
         colunas_faltantes = [c for c in colunas_obrigatorias if c not in df.columns]
@@ -24,6 +26,7 @@ class Processamentos:
             return False
         return True
 
+    # Seleção de arquivo e leitura do arquivo.
     def proc_adicionar(self):
         path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx")])
         if not path:
@@ -48,6 +51,7 @@ class Processamentos:
                 except Exception as e:
                     messagebox.showerror("Erro", f"Falha ao carregar arquivo: {e}")
 
+    # Atualiza a fila no gui, mostrando os arquivos selecionados.
     def atualizar_fila(self):
         self.txt_fila.configure(state="normal")
         self.txt_fila.delete("1.0", "end")
@@ -56,6 +60,8 @@ class Processamentos:
             self.txt_fila.insert("end", f"[{tag}] {arc['path']} | Chave: {arc['termo']}\n")
         self.txt_fila.configure(state="disabled")
 
+
+    # Limpa os arquivos selecionados e a mémoria.
     def proc_limpar(self):
         self.arquivos = []
         self.resultados_por_aba = {}
@@ -69,12 +75,12 @@ class Processamentos:
         self.txt_resumo.configure(state="disabled")
         self.btn_export.configure(state="disabled")
 
+    # Faz a busca com o SQL utilizando a plavra-chave ( o termo )
     def processar_sql(self):
         if len(self.arquivos) < 2:
             messagebox.showwarning("Aviso", "Adicione a Base e pelo menos um Confronto.")
             return
         try:
-                # - Atualização de linhas encontradas no espaço do gui
                 self.txt_resumo.configure(state="normal")
                 self.txt_resumo.delete("1.0", "end")
                 self.txt_resumo.insert("end", "-"*50 + "\n")
@@ -105,6 +111,7 @@ class Processamentos:
                 self.txt_resumo.configure(state="disabled")
                 self.btn_export.configure(state="normal")
                 messagebox.showinfo("Sucesso", "Processamento concluído!")  
+
         except Exception as e:
             self.txt_resumo.insert("end", f"\n\nERRO CRÍTICO: {e}")
             self.txt_resumo.configure(state="disabled")
@@ -112,9 +119,10 @@ class Processamentos:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro no processamento (Verifique se a coluna 'Histórico' existe): {e}")
 
+    # Exportação dos resultados para arquivo Excel já formatado.
     def exportar_excel(self):
         try:
-            save_path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile="Relatorio_Auditoria.xlsx")
+            save_path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile="Confronto_Resultado.xlsx")
             if not save_path: return
             operacao = self.optionmenu_var.get()
             with pd.ExcelWriter(save_path, engine='openpyxl') as writer:
@@ -160,6 +168,7 @@ class Processamentos:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro na exportação: {e}")
 
+# -- Clasee do GUI --
 class AutoDados(ctk.CTk, Processamentos):
     def __init__(self):
         super().__init__()
@@ -170,7 +179,7 @@ class AutoDados(ctk.CTk, Processamentos):
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)
         self.optionmenu_var = ctk.StringVar(value="Adição")
         
-        # Constantes para evitar erro de digitação nos nomes das colunas
+        
         self.SEP1 = " "
         self.SEP2 = "  "
         
@@ -183,25 +192,26 @@ class AutoDados(ctk.CTk, Processamentos):
         frame_top.pack(pady=10, padx=20, fill="x")
         
         ctk.CTkButton(frame_top, text="+ Adicionar Arquivo", fg_color="#1f538d", command=self.proc_adicionar).pack(side="left", padx=10, pady=10)
-
-        ctk.CTkButton(frame_top, text="- Limpar", fg_color="#A82424", command=self.proc_limpar).pack(side="left", padx=10, pady=10)
+        ctk.CTkButton(frame_top, text="- Limpar Arquivo", fg_color="#A82424", command=self.proc_limpar).pack(side="left", padx=10, pady=10)
 
         ctk.CTkLabel(frame_top, text="Operação:").pack(side="left", padx=5)
         self.combobox = ctk.CTkOptionMenu(frame_top, values=["Adição", "Subtração"], variable=self.optionmenu_var)
         self.combobox.pack(side="left", padx=10, pady=10)
 
+        # Fila de arquivos
         ctk.CTkLabel(self, text="Arquivos na Fila:").pack(anchor="w", padx=25)
         self.txt_fila = ctk.CTkTextbox(self, width=750, height=120)
         self.txt_fila.pack(pady=5, padx=20)
         self.txt_fila.configure(state="disabled")
 
-        self.btn_run = ctk.CTkButton(self, text="CALCULAR E PROCESSAR", fg_color="green", height=45, command=self.processar_sql)
+        self.btn_run = ctk.CTkButton(self, text="PROCESSAR", fg_color="green", height=45, command=self.processar_sql)
         self.btn_run.pack(pady=15)
 
+        # Log de Resumo
         self.txt_resumo = ctk.CTkTextbox(self, width=750, height=250, font=("Courier New", 12))
         self.txt_resumo.pack(pady=10, padx=20)
 
-        self.btn_export = ctk.CTkButton(self, text="EXPORTAR RELATÓRIO MULTI-ABAS", state="disabled", command=self.exportar_excel)
+        self.btn_export = ctk.CTkButton(self, text="EXPORTAR RELATÓRIO (EXCEL)", state="disabled", command=self.exportar_excel)
         self.btn_export.pack(pady=10)
 
 

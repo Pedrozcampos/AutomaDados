@@ -12,6 +12,7 @@ class Processamentos:
     def tratar_dados(self, df):
         for col in ['Débito', 'Crédito']:
             if col in df.columns:
+                df[col] = df[col].astype(str)
                 df[col] = df[col].replace(r'[R\$\s\xa0]', '', regex=True).str.replace(',', '.')
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
@@ -33,8 +34,6 @@ class Processamentos:
             return
         termo = simpledialog.askstring("Busca", "Palavra-chave:")
         if not termo:
-            return
-        if not self.validar_col(df):
             return
         if path:
             if termo:
@@ -85,15 +84,21 @@ class Processamentos:
                 self.txt_resumo.delete("1.0", "end")
                 self.txt_resumo.insert("end", "-"*50 + "\n")
                 self.resultados_por_aba = {}
-                t_base = f"%{self.arquivos[0]['termo']}%"
-                df_b = pd.read_sql_query("SELECT * FROM base WHERE Histórico LIKE ?", self.connection, params=(t_base,))
-                
+
+                # - Função para buscar o termo em todas colunas.
+                def busca_termo_col(tabela, termo):
+                    cursor = self.connection.execute(f"PRAGMA table_info('{tabela}')")
+                    colunas = [info[1] for info in cursor.fetchall()]
+                    filtro = " OR ".join([f"CAST([{col}] AS TEXT) LIKE ?" for col in colunas])
+                    query = f"SELECT * FROM {tabela} WHERE {filtro}"
+                    parametros = [F"%{termo}%"] * len(colunas)
+                    return pd.read_sql_query(query, self.connection, params=parametros, dtype=str)
+
+                df_b = busca_termo_col("base", self.arquivos[0]['termo'])
                 self.txt_resumo.insert("end", f"[BASE] {self.arquivos[0]['path']}: {len(df_b)} linhas encontradas.\n")
                 for i in range(1, len(self.arquivos)):
                     conf_info = self.arquivos[i]
-                    t_conf = f"%{conf_info['termo']}%"
-                    df_c = pd.read_sql_query(f"SELECT * FROM {conf_info['tabela']} WHERE Histórico LIKE ?", self.connection, params=(t_conf,))
-                    
+                    df_c = busca_termo_col(conf_info['tabela'], conf_info['termo'])
                     self.txt_resumo.insert("end", f"[CONF {i}] {conf_info['path']}: {len(df_c)} linhas encontradas.\n")
                     
                     df_aba = pd.concat([
@@ -102,6 +107,9 @@ class Processamentos:
                         df_c.reset_index(drop=True),
                         pd.DataFrame({self.SEP2: [" "] * max(len(df_b), len(df_c))})
                     ], axis=1).fillna(0)
+                    
+                    for col in ['Débito', 'Crédito']:
+                        df_aba[col] = df_aba[col].apply(pd.to_numeric, errors='coerce').fillna(0)
                     
                     aba_nome = f"Confronto {i}"
                     self.resultados_por_aba[aba_nome] = df_aba
@@ -124,49 +132,66 @@ class Processamentos:
         try:
             save_path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile="Confronto_Resultado.xlsx")
             if not save_path: return
+            
             operacao = self.optionmenu_var.get()
+            
             with pd.ExcelWriter(save_path, engine='openpyxl') as writer:
                 for nome_aba, df in self.resultados_por_aba.items():
                     cols = df.columns.tolist()
                     debs = [i for i, x in enumerate(cols) if x == 'Débito']
                     creds = [i for i, x in enumerate(cols) if x == 'Crédito']
-                    
-                    sep1_idx = cols.index(self.SEP1)
-                    sep2_idx = cols.index(self.SEP2)
-                    if operacao == "Adição":
-                        df['Débito'] = df.iloc[:, debs[0]] + df.iloc[:, debs[1]]
-                        df['Crédito'] = df.iloc[:, creds[0]] + df.iloc[:, creds[1]]
-                    else:
-                        df['Débito'] = df.iloc[:, debs[0]] - df.iloc[:, debs[1]]
-                        df['Crédito'] = df.iloc[:, creds[0]] - df.iloc[:, creds[1]]
+
+                    # Infos do Resultado
+                    if len(debs) >= 2 and len(creds) >= 2:
+                        if operacao == "Adição":
+                            df['DÉBITO'] = df.iloc[:, debs[0]] + df.iloc[:, debs[1]]
+                            df['CRÉDITO'] = df.iloc[:, creds[0]] + df.iloc[:, creds[1]]
+                        else:
+                            df['DÉBITO'] = df.iloc[:, debs[0]] - df.iloc[:, debs[1]]
+                            df['CRÉDITO'] = df.iloc[:, creds[0]] - df.iloc[:, creds[1]]
+
                     df.to_excel(writer, index=False, sheet_name=nome_aba, startrow=1)
                     ws = writer.sheets[nome_aba]
 
+                    # Localiza os separadores para a mesclagem visual
+                    try:
+                        sep1_col = cols.index(self.SEP1) + 1 
+                        sep2_col = cols.index(self.SEP2) + 1
+                    except ValueError:
+                        continue 
+
                     font_white = Font(bold=True, color="FFFFFF")
+                    center = Alignment(horizontal="center", vertical="center")
                     fill_base = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
                     fill_conf = PatternFill(start_color="E26B0A", end_color="E26B0A", fill_type="solid")
                     fill_res = PatternFill(start_color="375623", end_color="375623", fill_type="solid")
-                    center = Alignment(horizontal="center")
                     
-                    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=sep1_idx)
-                    c1 = ws.cell(row=1, column=1, value="DADOS DA BASE (REFERÊNCIA)")
-                    c1.font, c1.fill, c1.alignment = font_white, fill_base, center
+                    # Base
+                    if sep1_col > 1:
+                        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=sep1_col-1)
+                        c1 = ws.cell(row=1, column=1, value="DADOS DA BASE")
+                        c1.font, c1.fill, c1.alignment = font_white, fill_base, center
 
-                    ws.merge_cells(start_row=1, start_column=sep1_idx + 2, end_row=1, end_column=sep2_idx)
-                    c2 = ws.cell(row=1, column=sep1_idx + 2, value="DADOS DO CONFRONTO")
-                    c2.font, c2.fill, c2.alignment = font_white, fill_conf, center
-                    
-                    ws.merge_cells(start_row=1, start_column=sep2_idx + 2, end_row=1, end_column=len(df.columns))
-                    c3 = ws.cell(row=1, column=sep2_idx + 2, value="RESULTADO")
-                    c3.font, c3.fill, c3.alignment = font_white, fill_res, center
-                    
-                    ws.column_dimensions[ws.cell(row=2, column=sep1_idx+1).column_letter].width = 3
-                    ws.column_dimensions[ws.cell(row=2, column=sep2_idx+1).column_letter].width = 3
+                    # Confronto
+                    start_c = sep1_col + 1
+                    end_c = sep2_col - 1
+                    if end_c >= start_c: 
+                        ws.merge_cells(start_row=1, start_column=start_c, end_row=1, end_column=end_c)
+                        c2 = ws.cell(row=1, column=start_c, value="DADOS DO CONFRONTO")
+                        c2.font, c2.fill, c2.alignment = font_white, fill_conf, center
 
-            messagebox.showinfo("Sucesso", "Exportado com sucesso!")
+                    # Resultado
+                    start_r = sep2_col + 1
+                    end_r = len(df.columns)
+                    if end_r >= start_r:
+                        ws.merge_cells(start_row=1, start_column=start_r, end_row=1, end_column=end_r)
+                        c3 = ws.cell(row=1, column=start_r, value="RESULTADO FINAL")
+                        c3.font, c3.fill, c3.alignment = font_white, fill_res, center
+
+            messagebox.showinfo("Sucesso", "Exportado com Sucesso!")
             os.startfile(save_path)
         except Exception as e:
-            messagebox.showerror("Erro", f"Erro na exportação: {e}")
+            messagebox.showerror("Erro", f"Erro na formatação: {e}")
 
 # -- Clasee do GUI --
 class AutoDados(ctk.CTk, Processamentos):

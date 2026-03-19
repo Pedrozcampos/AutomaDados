@@ -85,7 +85,7 @@ class Processamentos:
             self.txt_resumo.insert("end", "-"*50 + "\n")
             self.resultados_por_aba = {}
 
-            # - Função para buscar o termo em todas colunas.
+            # Função para buscar o termo em todas colunas.
             def busca_termo_col(tabela, termo):
                 cursor = self.connection.execute(f"PRAGMA table_info('{tabela}')")
                 colunas = [info[1] for info in cursor.fetchall()]
@@ -218,7 +218,7 @@ class Processamentos:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro na formatação: {e}")
 
-# -- Clasee do GUI --
+# -- Classe do GUI --
 class AutoDados(ctk.CTk, Processamentos):
     def __init__(self):
         super().__init__()

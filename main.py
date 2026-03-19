@@ -80,39 +80,59 @@ class Processamentos:
             messagebox.showwarning("Aviso", "Adicione a Base e pelo menos um Confronto.")
             return
         try:
-                self.txt_resumo.configure(state="normal")
-                self.txt_resumo.delete("1.0", "end")
-                self.txt_resumo.insert("end", "-"*50 + "\n")
-                self.resultados_por_aba = {}
+            self.txt_resumo.configure(state="normal")
+            self.txt_resumo.delete("1.0", "end")
+            self.txt_resumo.insert("end", "-"*50 + "\n")
+            self.resultados_por_aba = {}
 
-                # - Função para buscar o termo em todas colunas.
-                def busca_termo_col(tabela, termo):
-                    cursor = self.connection.execute(f"PRAGMA table_info('{tabela}')")
-                    colunas = [info[1] for info in cursor.fetchall()]
-                    filtro = " OR ".join([f"CAST([{col}] AS TEXT) LIKE ?" for col in colunas])
-                    query = f"SELECT * FROM {tabela} WHERE {filtro}"
-                    parametros = [F"%{termo}%"] * len(colunas)
-                    return pd.read_sql_query(query, self.connection, params=parametros, dtype=str)
+            # - Função para buscar o termo em todas colunas.
+            def busca_termo_col(tabela, termo):
+                cursor = self.connection.execute(f"PRAGMA table_info('{tabela}')")
+                colunas = [info[1] for info in cursor.fetchall()]
+                filtro = " OR ".join([f"CAST([{col}] AS TEXT) LIKE ?" for col in colunas])
+                query = f"SELECT * FROM {tabela} WHERE {filtro}"
+                parametros = [F"%{termo}%"] * len(colunas)
+                return pd.read_sql_query(query, self.connection, params=parametros, dtype=str)
 
-                df_b = busca_termo_col("base", self.arquivos[0]['termo'])
-                self.txt_resumo.insert("end", f"[BASE] {self.arquivos[0]['path']}: {len(df_b)} linhas encontradas.\n")
-                for i in range(1, len(self.arquivos)):
-                    conf_info = self.arquivos[i]
-                    df_c = busca_termo_col(conf_info['tabela'], conf_info['termo'])
-                    self.txt_resumo.insert("end", f"[CONF {i}] {conf_info['path']}: {len(df_c)} linhas encontradas.\n")
-                    
-                    df_aba = pd.concat([
-                        df_b.reset_index(drop=True),
-                        pd.DataFrame({self.SEP1: [" "] * max(len(df_b), len(df_c))}),
-                        df_c.reset_index(drop=True),
-                        pd.DataFrame({self.SEP2: [" "] * max(len(df_b), len(df_c))})
-                    ], axis=1).fillna(0)
-                    
-                    for col in ['Débito', 'Crédito']:
-                        df_aba[col] = df_aba[col].apply(pd.to_numeric, errors='coerce').fillna(0)
-                    
-                    aba_nome = f"Confronto {i}"
-                    self.resultados_por_aba[aba_nome] = df_aba
+            df_b = busca_termo_col("base", self.arquivos[0]['termo'])
+            self.txt_resumo.insert("end", f"[BASE] {self.arquivos[0]['path']}: {len(df_b)} linhas encontradas.\n")
+            for i in range(1, len(self.arquivos)):
+                conf_info = self.arquivos[i]
+                df_c = busca_termo_col(conf_info['tabela'], conf_info['termo'])
+            
+            # Garante conversão numérica para soma total
+                for c in ['Débito', 'Crédito']:
+                    df_b[c] = pd.to_numeric(df_b[c], errors='coerce').fillna(0)
+                    df_c[c] = pd.to_numeric(df_c[c], errors='coerce').fillna(0)
+                # Totais
+                tot_deb_b = df_b['Débito'].sum()
+                tot_cre_b = df_b['Crédito'].sum()
+                tot_deb_c = df_c['Débito'].sum()
+                tot_cre_c = df_c['Crédito'].sum()
+
+                operacao = self.optionmenu_var.get()
+                if operacao == "Adição":
+                    res_deb = round(float(tot_deb_b + tot_deb_c), 2)
+                    res_cre = round(float(tot_cre_b + tot_cre_c), 2)
+                else:
+                    res_deb = round(float(tot_deb_b - tot_deb_c), 2)
+                    res_cre = round(float(tot_cre_b - tot_cre_c), 2)
+
+                df_aba = pd.concat([
+                    df_b.reset_index(drop=True),
+                    pd.DataFrame({self.SEP1: [" "] * max(len(df_b), len(df_c))}),
+                    df_c.reset_index(drop=True),
+                    pd.DataFrame({self.SEP2: [" "] * max(len(df_b), len(df_c))})
+                ], axis=1).fillna(0)
+                
+                df_aba['DÉBITO TOTAL'] = None
+                df_aba['CRÉDITO TOTAL'] = None  
+                df_aba.at[0, 'DÉBITO TOTAL'] = res_deb
+                df_aba.at[0, 'CRÉDITO TOTAL'] = res_cre
+
+                aba_nome = f"Confronto {i}"
+                self.resultados_por_aba[aba_nome] = df_aba
+                self.txt_resumo.insert("end", f"[CONF {i}] Processado com sucesso.\n")
                 
                 self.txt_resumo.insert("end", "-"*50 + "\n")
                 self.txt_resumo.insert("end", "SUCESSO: Dados prontos para exportação.")
@@ -185,9 +205,14 @@ class Processamentos:
                     end_r = len(df.columns)
                     if end_r >= start_r:
                         ws.merge_cells(start_row=1, start_column=start_r, end_row=1, end_column=end_r)
-                        c3 = ws.cell(row=1, column=start_r, value="RESULTADO FINAL")
+                        c3 = ws.cell(row=1, column=start_r, value="RESULTADO CONSOLIDADO (TOTAIS)")
                         c3.font, c3.fill, c3.alignment = font_white, fill_res, center
-
+                        
+                        #
+                        ws.cell(row=2, column=start_r).font = Font(bold=True)
+                        ws.cell(row=2, column=start_r + 1).font = Font(bold=True)
+                        ws.column_dimensions[ws.cell(row=2, column=start_r).column_letter].width = 20
+                        ws.column_dimensions[ws.cell(row=2, column=start_r + 1).column_letter].width = 20
             messagebox.showinfo("Sucesso", "Exportado com Sucesso!")
             os.startfile(save_path)
         except Exception as e:

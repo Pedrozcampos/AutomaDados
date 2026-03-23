@@ -19,7 +19,7 @@
 
 # Tecnologias Utilizadas
 - *Python*.
-- *SQLite3*: É a o motor do banco de dados.
+- *SQLite3*: É o motor do banco de dados.
 - *Pandas*: Para manipular dados.
 - *CustomTkinter*: Para criação do gui.
 - *Openpyxl*: Para formatar e estilização do relatório do Excel.

@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 
 # -- Classe dos Procedimentos --
 class Processamentos:
-    # Limpeza de dados 
+    # - Limpeza de dados 
     def tratar_dados(self, df):
         for col in ['Débito', 'Crédito']:
             if col in df.columns:
@@ -17,7 +17,7 @@ class Processamentos:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
 
-    # Verificação de colunas necessárias.
+    # - Verificação de colunas necessárias.
     def validar_col(self, df):
         colunas_obrigatorias = ['Histórico', 'Débito', 'Crédito', 'Conta', 'Data',]
         colunas_faltantes = [c for c in colunas_obrigatorias if c not in df.columns]
@@ -27,7 +27,7 @@ class Processamentos:
             return False
         return True
 
-    # Seleção de arquivo e leitura do arquivo.
+    # - Seleção de arquivo e leitura do arquivo.
     def proc_adicionar(self):
         path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx")])
         if not path:
@@ -50,7 +50,7 @@ class Processamentos:
                 except Exception as e:
                     messagebox.showerror("Erro", f"Falha ao carregar arquivo: {e}")
 
-    # Atualiza a fila no gui, mostrando os arquivos selecionados.
+    # - Atualiza a fila no gui, mostrando os arquivos selecionados.
     def atualizar_fila(self):
         self.txt_fila.configure(state="normal")
         self.txt_fila.delete("1.0", "end")
@@ -60,7 +60,7 @@ class Processamentos:
         self.txt_fila.configure(state="disabled")
 
 
-    # Limpa os arquivos selecionados e a mémoria.
+    # - Limpa os arquivos selecionados e a mémoria.
     def proc_limpar(self):
         self.arquivos = []
         self.resultados_por_aba = {}
@@ -74,7 +74,7 @@ class Processamentos:
         self.txt_resumo.configure(state="disabled")
         self.btn_export.configure(state="disabled")
 
-    # Faz a busca com o SQL utilizando a plavra-chave ( o termo )
+    # - Faz a busca com o SQL utilizando a plavra-chave ( o termo )
     def processar_sql(self):
         if len(self.arquivos) < 2:
             messagebox.showwarning("Aviso", "Adicione a Base e pelo menos um Confronto.")
@@ -85,7 +85,7 @@ class Processamentos:
             self.txt_resumo.insert("end", "-"*50 + "\n")
             self.resultados_por_aba = {}
 
-            # Função para buscar o termo em todas colunas.
+            # - Função para buscar o termo em todas colunas.
             def busca_termo_col(tabela, termo):
                 cursor = self.connection.execute(f"PRAGMA table_info('{tabela}')")
                 colunas = [info[1] for info in cursor.fetchall()]
@@ -100,7 +100,7 @@ class Processamentos:
                 conf_info = self.arquivos[i]
                 df_c = busca_termo_col(conf_info['tabela'], conf_info['termo'])
             
-            # Garante conversão numérica para soma total
+            # - Garante conversão numérica para soma total
                 for c in ['Débito', 'Crédito']:
                     df_b[c] = pd.to_numeric(df_b[c], errors='coerce').fillna(0)
                     df_c[c] = pd.to_numeric(df_c[c], errors='coerce').fillna(0)
@@ -147,7 +147,7 @@ class Processamentos:
         except Exception as e:
             messagebox.showerror("Erro", f"Erro no processamento (Verifique se a coluna 'Histórico' existe): {e}")
 
-    # Exportação dos resultados para arquivo Excel já formatado.
+    # - Exportação dos resultados para arquivo Excel já formatado.
     def exportar_excel(self):
         try:
             save_path = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile="Confronto_Resultado.xlsx")
@@ -161,7 +161,7 @@ class Processamentos:
                     debs = [i for i, x in enumerate(cols) if x == 'Débito']
                     creds = [i for i, x in enumerate(cols) if x == 'Crédito']
 
-                    # Infos do Resultado
+                    # - Infos do Resultado
                     if len(debs) >= 2 and len(creds) >= 2:
                         if operacao == "Adição":
                             df['DÉBITO'] = df.iloc[:, debs[0]] + df.iloc[:, debs[1]]
@@ -173,7 +173,7 @@ class Processamentos:
                     df.to_excel(writer, index=False, sheet_name=nome_aba, startrow=1)
                     ws = writer.sheets[nome_aba]
 
-                    # Localiza os separadores para a mesclagem visual
+                    # - Localiza os separadores para a mesclagem visual
                     try:
                         sep1_col = cols.index(self.SEP1) + 1 
                         sep2_col = cols.index(self.SEP2) + 1
@@ -186,13 +186,13 @@ class Processamentos:
                     fill_conf = PatternFill(start_color="E26B0A", end_color="E26B0A", fill_type="solid")
                     fill_res = PatternFill(start_color="375623", end_color="375623", fill_type="solid")
                     
-                    # Base
+                    # - Base -
                     if sep1_col > 1:
                         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=sep1_col-1)
                         c1 = ws.cell(row=1, column=1, value="DADOS DA BASE")
                         c1.font, c1.fill, c1.alignment = font_white, fill_base, center
 
-                    # Confronto
+                    # - Confronto -
                     start_c = sep1_col + 1
                     end_c = sep2_col - 1
                     if end_c >= start_c: 
@@ -200,7 +200,7 @@ class Processamentos:
                         c2 = ws.cell(row=1, column=start_c, value="DADOS DO CONFRONTO")
                         c2.font, c2.fill, c2.alignment = font_white, fill_conf, center
 
-                    # Resultado
+                    # - Resultado -
                     start_r = sep2_col + 1
                     end_r = len(df.columns)
                     if end_r >= start_r:
@@ -208,7 +208,7 @@ class Processamentos:
                         c3 = ws.cell(row=1, column=start_r, value="RESULTADO CONSOLIDADO (TOTAIS)")
                         c3.font, c3.fill, c3.alignment = font_white, fill_res, center
                         
-                        #
+                        
                         ws.cell(row=2, column=start_r).font = Font(bold=True)
                         ws.cell(row=2, column=start_r + 1).font = Font(bold=True)
                         ws.column_dimensions[ws.cell(row=2, column=start_r).column_letter].width = 20

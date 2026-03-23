@@ -18,8 +18,8 @@
 - *exportar_exceel*: Gera o arquivo final ( EXCEL ) com todos os dados incluindo o resultado com sua formatação adequada.
 
 # Tecnologias Utilizadas
-*Python*.
-*SQLite3*: É a o motor do banco de dados.
-*Pandas*: Para manipular dados.
-*CustomTkinter*: Para criação do gui.
-*Openpyxl*: Para formatar e estilização do relatório do Excel.
+- *Python*.
+- *SQLite3*: É a o motor do banco de dados.
+- *Pandas*: Para manipular dados.
+- *CustomTkinter*: Para criação do gui.
+- *Openpyxl*: Para formatar e estilização do relatório do Excel.

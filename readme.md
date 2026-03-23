@@ -9,13 +9,13 @@
 
 # Procedimentos
 - Temos algumas funções na nossa primeira classe onde:
-*tratar_dados*: Limpa os valores monetários e converte para números.
-*validar_col*: Serve para validar se as colunas obrigatorias estão presentes.
-*proc_adicionar*: Procedimento de adicionar o arquivo na ferramenta com sua devida palavra chave.
-*proc_limpar*: Remove todos arquivos da ferramenta e reinicia o banco de dados na mémoria.
-*atualizar_fila*: Atualiza a lista visual conforme é adicionado arquivos.
-*processar_sql*: Faz a busca SQL filtrando utilizando o termo e une os dados para confronto.
-*exportar_exceel*: Gera o arquivo final ( EXCEL ) com todos os dados incluindo o resultado com sua formatação adequada.
+- *tratar_dados*: Limpa os valores monetários e converte para números.
+- *validar_col*: Serve para validar se as colunas obrigatorias estão presentes.
+- *proc_adicionar*: Procedimento de adicionar o arquivo na ferramenta com sua devida palavra chave.
+- *proc_limpar*: Remove todos arquivos da ferramenta e reinicia o banco de dados na mémoria.
+- *atualizar_fila*: Atualiza a lista visual conforme é adicionado arquivos.
+- *processar_sql*: Faz a busca SQL filtrando utilizando o termo e une os dados para confronto.
+- *exportar_exceel*: Gera o arquivo final ( EXCEL ) com todos os dados incluindo o resultado com sua formatação adequada.
 
 # Tecnologias Utilizadas
 *Python*.
